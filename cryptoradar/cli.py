@@ -16,7 +16,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import scanner, report
+from . import scanner, report, review as review_mod, roadmap as roadmap_mod
 from .detectors import Category
 
 SEVERITY_NAMES = {"critical": 5, "high": 4, "medium": 3, "low": 2, "info": 1}
@@ -77,6 +77,33 @@ def _build_parser() -> argparse.ArgumentParser:
     cbom_p.add_argument("--name", default=None)
     cbom_p.add_argument("-o", "--output", default="cbom.json")
 
+    cbom_multi_p = sub.add_parser("cbom-multi", help="Emit a combined CBOM JSON for several components at once "
+                                                       "(this is the file `review`/`roadmap` expect for a multi-service engagement).")
+    cbom_multi_p.add_argument("components", nargs="+", help="One or more NAME:PATH pairs.")
+    cbom_multi_p.add_argument("-o", "--output", default="cbom.json")
+
+    review_p = sub.add_parser("review", help="Interactively triage findings from a CBOM before they can go into a client roadmap.")
+    review_p.add_argument("cbom", help="Path to a CBOM JSON file (from `cryptoradar cbom`).")
+    review_p.add_argument("-o", "--output", default="review.json", help="Review record output/resume path.")
+    review_p.add_argument("--reviewer", required=True, help="Name of the person doing the review (recorded in the output).")
+    review_p.add_argument("--no-resume", action="store_true", help="Ignore any existing review file at --output and start fresh.")
+    review_p.add_argument("--include-info", action="store_true",
+                           help="Also review PQC-present / informational findings (skipped by default).")
+
+    roadmap_p = sub.add_parser("roadmap", help="Generate a client-facing .docx roadmap from a CBOM + its review file. "
+                                                "Only findings with a review record are included.")
+    roadmap_p.add_argument("cbom", help="Path to the CBOM JSON file.")
+    roadmap_p.add_argument("review", help="Path to the review JSON file (from `cryptoradar review`).")
+    roadmap_p.add_argument("-o", "--output", default="Crypto_Agility_Roadmap.docx")
+    roadmap_p.add_argument("--client", default="Client", help="Client/organization name for the cover page.")
+    roadmap_p.add_argument("--consultant", default="", help="Consultant name for the cover page and exec summary.")
+    roadmap_p.add_argument("--firm", default="", help="Consulting firm name for the cover page.")
+    roadmap_p.add_argument("--engagement-date", default=None, help="Defaults to today.")
+    roadmap_p.add_argument("--shelf-life", type=float, default=10.0)
+    roadmap_p.add_argument("--migration-time", type=float, default=3.0)
+    roadmap_p.add_argument("--z-low", type=int, default=8)
+    roadmap_p.add_argument("--z-high", type=int, default=20)
+
     return p
 
 
@@ -120,6 +147,58 @@ def main(argv=None) -> int:
         with open(args.output, "w", encoding="utf-8") as fh:
             fh.write(report.render_cbom_json(result))
         print(f"[cryptoradar] CBOM written -> {args.output}")
+
+    elif args.command == "cbom-multi":
+        pairs = []
+        for c in args.components:
+            if ":" not in c:
+                print(f"[cryptoradar] Invalid component spec '{c}', expected NAME:PATH", file=sys.stderr)
+                return 2
+            name, path = c.split(":", 1)
+            pairs.append((name, path))
+        result = scanner.scan_multi(pairs)
+        with open(args.output, "w", encoding="utf-8") as fh:
+            fh.write(report.render_cbom_json(result))
+        total_findings = sum(len(c["findings"]) for c in result["components"])
+        print(f"[cryptoradar] CBOM written for {len(pairs)} components, "
+              f"{total_findings} total findings -> {args.output}")
+
+    elif args.command == "review":
+        import json
+        with open(args.cbom, "r", encoding="utf-8") as fh:
+            cbom = json.load(fh)
+        try:
+            review_mod.run_interactive_review(
+                cbom, args.output, reviewer=args.reviewer,
+                resume=not args.no_resume, skip_positive=not args.include_info,
+            )
+        except (KeyboardInterrupt, EOFError):
+            print("\n[cryptoradar] Review interrupted — progress up to the last "
+                  "completed item was already saved.", file=sys.stderr)
+            return 130
+
+    elif args.command == "roadmap":
+        import json
+        with open(args.cbom, "r", encoding="utf-8") as fh:
+            cbom = json.load(fh)
+        review = review_mod.load_review(args.review)
+        if not review["records"]:
+            print("[cryptoradar] The review file has no reviewed findings yet — "
+                  "run `cryptoradar review` first. Refusing to generate an empty roadmap.",
+                  file=sys.stderr)
+            return 1
+        meta = {
+            "client": args.client, "consultant": args.consultant, "firm": args.firm,
+            "engagement_date": args.engagement_date,
+            "shelf_life_years": args.shelf_life, "migration_years": args.migration_time,
+            "z_low": args.z_low, "z_high": args.z_high,
+        }
+        doc = roadmap_mod.build_roadmap(cbom, review, meta)
+        doc.save(args.output)
+        confirmed = sum(1 for r in review["records"].values() if r["status"] == "confirmed")
+        print(f"[cryptoradar] Roadmap written -> {args.output} "
+              f"({confirmed} confirmed findings included, "
+              f"{len(review['records'])} total reviewed)")
 
     return 0
 

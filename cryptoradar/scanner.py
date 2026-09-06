@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 from .detectors import SIGNATURES, Category
 from .risk import score_finding
+from .redact import redact_finding
 
 # Extensions worth scanning across a typical mixed African fintech stack:
 # Java/Kotlin (core + middleware), COBOL (mainframe cores), JS/TS (API/mobile),
@@ -61,7 +62,7 @@ def scan_file(path: str, rel_path: str) -> list[dict]:
                     line_no = i
                     break
             snippet = lines[line_no - 1].strip() if 0 < line_no <= len(lines) else m.group(0)
-            findings.append({
+            finding = {
                 "signature_id": sig.id,
                 "file": rel_path,
                 "line": line_no,
@@ -73,7 +74,8 @@ def scan_file(path: str, rel_path: str) -> list[dict]:
                 "note": sig.note,
                 "migration_hint": sig.migration_hint,
                 "weighted_score": score_finding(sig.severity, sig.category),
-            })
+            }
+            findings.append(redact_finding(finding))
     return findings
 
 

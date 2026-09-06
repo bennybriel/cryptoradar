@@ -1,10 +1,13 @@
 [project]
 name = "cryptoradar"
-version = "0.1.0"
+version = "0.2.0"
 description = "Crypto-agility and quantum-readiness assessment toolkit for fintech codebases (built for mixed legacy-core + API-layer African fintech stacks)."
 requires-python = ">=3.9"
 license = {text = "MIT"}
 readme = "README.md"
+dependencies = [
+    "python-docx>=1.0.0",
+]
 
 [project.scripts]
 cryptoradar = "cryptoradar.cli:main"

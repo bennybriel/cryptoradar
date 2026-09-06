@@ -68,6 +68,62 @@ cryptoradar scan-multi \
   --shelf-life 15 --migration-time 4 -o demo_report.html
 ```
 
+## Running a real client engagement (scan → review → roadmap)
+
+A raw scan is a list of pattern matches, not a finding a bank should act
+on. **The deliverable that's actually sellable is a document where every
+item has been personally verified by a consultant** — this workflow makes
+that the only path the tool supports; there is no CLI command that turns
+an unreviewed CBOM directly into a client document.
+
+```bash
+# 1. Scan the client's full estate into one machine-readable CBOM.
+#    Hardcoded secrets/IVs are redacted automatically at this step —
+#    the raw values never get written to disk from here on.
+cryptoradar cbom-multi \
+  "legacy-core:./client-core-banking" \
+  "api-layer:./client-middleware" \
+  "mobile-adapter:./client-wallet-bridge" \
+  -o cbom.json
+
+# 2. Walk through every finding yourself. For each one: confirm it,
+#    mark it a false positive, mark it an accepted (deferred) risk, or
+#    mark it already remediated — with a note and, for confirmed items,
+#    a priority phase. Progress saves after every single item, so it's
+#    safe to Ctrl+C and resume later with the same command.
+cryptoradar review cbom.json -o review.json --reviewer "Olamiji Gabriel"
+
+# 3. Generate the actual client document. This step reads cbom.json +
+#    review.json and INCLUDES ONLY findings that have a review record —
+#    anything you skipped or haven't reached yet is silently left out,
+#    and the command refuses to run at all against an empty review file.
+cryptoradar roadmap cbom.json review.json \
+  -o "ClientName_Crypto_Agility_Roadmap.docx" \
+  --client "Client Bank Plc" \
+  --consultant "Olamiji Gabriel" \
+  --firm "Bennybriel Technologies" \
+  --shelf-life 15 --migration-time 4
+```
+
+The resulting `.docx` has a cover page, an executive summary (counts of
+confirmed / false-positive / accepted-risk / already-remediated — so the
+client sees the review happened, not just the tool's raw output), the
+Mosca exposure panel, a phased remediation roadmap table grouped by the
+priority you assigned during review, an accepted-risk register, a
+detailed appendix per confirmed finding (secrets still redacted here),
+and a methodology/limitations section that says plainly this is not a
+penetration test, audit, or compliance certification.
+
+**Why the tool is built to make this the only path**, not just documented
+as best practice: a report auto-generated straight from `cbom.json` would
+be trivial to hand over unreviewed under deadline pressure — and the
+biggest real risk this workflow is designed against isn't a missed
+signature, it's a client being handed unverified automated output as if
+it were consultant-verified. Building the enforcement into `roadmap.py`
+(it calls the same merge function whether you remembered to review
+carefully or not) means that mistake structurally can't happen, rather
+than relying on remembering not to skip a step.
+
 ## Using it in someone else's project
 
 **As a CLI, installed from GitHub (works today, no PyPI needed):**
@@ -171,9 +227,12 @@ pointing external users at this rather than internal/consulting-client use.
 cryptoradar/
   detectors.py   - signature catalogue (regex-based, cross-language)
   scanner.py     - repo walker -> CBOM findings
+  redact.py      - masks secret/IV values before they reach any output
   risk.py        - severity scoring + Mosca inequality calculator
-  report.py      - self-contained HTML report renderer
-  cli.py         - `cryptoradar scan / scan-multi / cbom`
+  review.py      - analyst triage layer (confirm/dismiss/accept-risk per finding)
+  roadmap.py     - client-facing .docx generator (reviewed findings only)
+  report.py      - self-contained HTML report renderer (for internal/CI use)
+  cli.py         - `cryptoradar scan / scan-multi / cbom / cbom-multi / review / roadmap`
 tests/           - pytest smoke tests
 demo_repo/       - fictional 4-component mixed stack for demos/sales calls
 ```
@@ -224,7 +283,10 @@ This is designed as **open-core, not open-and-hope**:
   and fintechs can hand to examiners, which is a wedge for both the
   consulting and SaaS tracks.
 
-## Roadmap
+## Project Roadmap
+
+(Not to be confused with the `cryptoradar roadmap` command above, which
+generates a client deliverable — this section is the tool's own future work.)
 
 - [ ] AST-based Java detector (reduce false positives on comments/strings)
 - [ ] COBOL `CALL 'CSNBENC'`/ICSF-style crypto call detection for real mainframe cores
