@@ -92,7 +92,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: bennybriel/cryptoradar@main   # pin to a tag in production
+      - uses: bennybriel/cryptoradar@v0.1.0   # pin to a tag in production
         with:
           path: '.'
           fail-on: critical      # fails the PR check if a critical finding exists
