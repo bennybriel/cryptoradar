@@ -1,0 +1,17 @@
+[project]
+name = "cryptoradar"
+version = "0.1.0"
+description = "Crypto-agility and quantum-readiness assessment toolkit for fintech codebases (built for mixed legacy-core + API-layer African fintech stacks)."
+requires-python = ">=3.9"
+license = {text = "MIT"}
+readme = "README.md"
+
+[project.scripts]
+cryptoradar = "cryptoradar.cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["cryptoradar*"]

@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[dev]" || pip install -e . pytest
+      - run: python -m pytest tests/ -v
+
+  self-scan-demo:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - name: Scan the demo fixture repo (expected to find issues — that's the point)
+        run: |
+          cryptoradar scan-multi \
+            "legacy-core:demo_repo/legacy-core-java" \
+            "api-layer:demo_repo/api-layer-node" \
+            "mobile-adapter:demo_repo/mobile-adapter-python" \
+            "pqc-pilot:demo_repo/pqc-pilot-service" \
+            -o demo_report.html --fail-on none
+      - uses: actions/upload-artifact@v4
+        with:
+          name: demo-report
+          path: demo_report.html

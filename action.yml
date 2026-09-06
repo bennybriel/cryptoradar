@@ -1,0 +1,59 @@
+name: 'CryptoRadar Scan'
+description: 'Scan a repository for crypto-agility and quantum-readiness issues (weak/legacy algorithms, hardcoded secrets, PQC readiness).'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  path:
+    description: 'Path to scan (relative to repo root).'
+    required: false
+    default: '.'
+  fail-on:
+    description: 'Minimum severity to fail the build on: critical, high, medium, low, info, or none.'
+    required: false
+    default: 'critical'
+  shelf-life:
+    description: 'Years the data/system must remain secure (Mosca X).'
+    required: false
+    default: '10'
+  migration-time:
+    description: 'Estimated years to complete migration once started (Mosca Y).'
+    required: false
+    default: '3'
+  output:
+    description: 'HTML report output path.'
+    required: false
+    default: 'cryptoradar_report.html'
+  ref:
+    description: 'Git ref of bennybriel/cryptoradar to install (branch, tag, or commit SHA). Pin this in production.'
+    required: false
+    default: 'main'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install CryptoRadar
+      shell: bash
+      run: pip install "git+https://github.com/bennybriel/cryptoradar.git@${{ inputs.ref }}"
+
+    - name: Run scan
+      shell: bash
+      run: |
+        cryptoradar scan "${{ inputs.path }}" \
+          -o "${{ inputs.output }}" \
+          --fail-on "${{ inputs.fail-on }}" \
+          --shelf-life "${{ inputs.shelf-life }}" \
+          --migration-time "${{ inputs.migration-time }}"
+
+    - name: Upload report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: cryptoradar-report
+        path: ${{ inputs.output }}

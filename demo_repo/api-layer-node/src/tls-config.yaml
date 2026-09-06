@@ -1,0 +1,4 @@
+server:
+  tls:
+    minVersion: TLSv1.0   # kept for one legacy USSD aggregator integration
+    ciphers: RC4-SHA
