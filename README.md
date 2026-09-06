@@ -72,13 +72,57 @@ cryptoradar scan-multi \
 
 **As a CLI, installed from GitHub (works today, no PyPI needed):**
 
+Run these as two separate commands — pasting them as one line will make
+`pip` try to parse `scan`/`-o` as install flags and fail:
+
 ```bash
-pip install "git+https://github.com/bennybriel/cryptoradar.git"
-cryptoradar scan ./their-repo -o report.html
+pip install "git+https://github.com/bennybriel/cryptoradar.git@v0.1.0"
+```
+```bash
+cryptoradar scan /path/to/a/real/repo-on-your-machine -o report.html
 ```
 
-Pin a tag/commit instead of `main` for anything beyond a quick try:
-`...cryptoradar.git@v0.1.0`.
+Replace the path with an actual folder that exists — pointing it at a
+placeholder path (or an empty one) will correctly report `0 files, 0
+findings` rather than erroring, which can look like a bug but isn't one.
+The fastest way to see real output is to scan the bundled demo fixtures
+instead of a repo of your own:
+
+```bash
+cd cryptoradar   # the folder this repo was cloned/extracted into
+cryptoradar scan-multi \
+  "legacy-core:demo_repo/legacy-core-java" \
+  "api-layer:demo_repo/api-layer-node" \
+  "mobile-adapter:demo_repo/mobile-adapter-python" \
+  "pqc-pilot:demo_repo/pqc-pilot-service" \
+  --shelf-life 15 --migration-time 4 \
+  -o demo_report.html
+```
+(On Windows `cmd.exe`, replace the trailing `\` line continuations with
+`^`, or just put the whole command on one line.)
+
+Then open the report — it's a single static HTML file, no server needed:
+
+```bash
+open report.html      # macOS
+xdg-open report.html  # Linux
+start report.html     # Windows
+```
+
+**If `cryptoradar` isn't recognized after installing (common on Windows):**
+pip installs the command into a `Scripts` folder that isn't always on your
+`PATH` by default. Two fixes, easiest first:
+
+- Skip PATH entirely and call the module directly — works immediately,
+  every OS: `python -m cryptoradar.cli scan /path/to/repo -o report.html`
+- Or fix PATH properly: run `pip show -f cryptoradar`, find the folder
+  containing `cryptoradar.exe` (or `cryptoradar` on macOS/Linux), add it to
+  your OS's `PATH` environment variable, then **open a new terminal window**
+  (existing windows won't pick up the change) and try `cryptoradar --help` again.
+
+Pin a tag/commit instead of `main` for anything beyond a quick try —
+`...cryptoradar.git@v0.1.0` as shown above — so a later change to this
+repo's default branch doesn't silently change what gets installed.
 
 **As a GitHub Action, in their own CI pipeline** — this repo ships a
 composite action (`action.yml`) so any repo on GitHub can add crypto
