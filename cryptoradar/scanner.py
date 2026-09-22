@@ -6,12 +6,13 @@ cryptographic primitive reference found, with file/line provenance.
 
 from __future__ import annotations
 import os
-import fnmatch
+import bisect
 from datetime import datetime, timezone
 
 from .detectors import SIGNATURES, Category
 from .risk import score_finding
 from .redact import redact_finding
+from .comments import mask_comments
 
 # Extensions worth scanning across a typical mixed African fintech stack:
 # Java/Kotlin (core + middleware), COBOL (mainframe cores), JS/TS (API/mobile),
@@ -39,29 +40,45 @@ def _iter_files(root: str, extensions: set[str], ignore_dirs: set[str]):
                 yield os.path.join(dirpath, fn)
 
 
+def _line_starts(text: str) -> list[int]:
+    """Offset (into `text`) where each line begins, 0-indexed, plus a
+    trailing sentinel equal to len(text). Built with a single pass over
+    newline positions rather than reconstructing the file from readlines()."""
+    starts = [0]
+    idx = text.find("\n")
+    while idx != -1:
+        starts.append(idx + 1)
+        idx = text.find("\n", idx + 1)
+    return starts
+
+
+def _line_number(line_starts: list[int], offset: int) -> int:
+    """O(log n) lookup via bisect instead of the previous O(n) linear scan
+    per match — matters once a file has many lines and many findings,
+    since this was previously O(matches x lines) for a single file."""
+    return bisect.bisect_right(line_starts, offset)
+
+
 def scan_file(path: str, rel_path: str) -> list[dict]:
     findings = []
     try:
         with open(path, "r", encoding="utf-8", errors="ignore") as fh:
-            lines = fh.readlines()
-    except (OSError, UnicodeDecodeError):
+            text = fh.read()
+    except OSError:
         return findings
 
-    text = "".join(lines)
-    line_starts = [0]
-    for ln in lines:
-        line_starts.append(line_starts[-1] + len(ln))
+    ext = os.path.splitext(path)[1]
+    scan_text = mask_comments(text, ext)
+    line_starts = _line_starts(text)
+    raw_lines = None  # populated lazily only if a match is actually found
 
     for sig in SIGNATURES:
-        for m in sig.finditer(text):
-            # find line number via binary-search-free linear scan (files are small)
+        for m in sig.finditer(scan_text):
             offset = m.start()
-            line_no = 1
-            for i, ls in enumerate(line_starts):
-                if ls > offset:
-                    line_no = i
-                    break
-            snippet = lines[line_no - 1].strip() if 0 < line_no <= len(lines) else m.group(0)
+            line_no = _line_number(line_starts, offset)
+            if raw_lines is None:
+                raw_lines = text.splitlines()
+            snippet = raw_lines[line_no - 1].strip() if 0 < line_no <= len(raw_lines) else m.group(0)
             finding = {
                 "signature_id": sig.id,
                 "file": rel_path,

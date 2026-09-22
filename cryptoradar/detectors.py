@@ -113,6 +113,27 @@ SIGNATURES: list[Signature] = [
                         "and `alg` fields can be swapped without a breaking release.",
     ),
 
+    Signature(
+        id="JCA-COMPOUND-SIG-ALG",
+        pattern=r"\b(?:MD5|SHA-?1|SHA-?224|SHA-?256|SHA-?384|SHA-?512|NONE)with(RSA|ECDSA|DSA)\b",
+        category=Category.ASYMMETRIC_QUANTUM_BREAKABLE,
+        primitive="JCA compound signature algorithm",
+        severity=4,
+        quantum_relevant=True,
+        note="Java Cryptography Architecture names signature algorithms as "
+             "a single concatenated token, e.g. 'SHA256withRSA' or "
+             "'SHA1withECDSA'. Because there is no separator between the "
+             "hash and asymmetric algorithm names, neither the standalone "
+             "hash signature nor the standalone RSA/ECDSA signature can "
+             "match this token under word-boundary rules — without this "
+             "dedicated pattern, the single most common way Java code "
+             "names a signing algorithm goes completely undetected.",
+        migration_hint="Migrate signing to ML-DSA (FIPS 204). If the hash "
+                        "component is MD5 or SHA-1, that is an independent, "
+                        "more urgent weakness (collision attacks exist "
+                        "today) — remediate it regardless of PQC timeline.",
+    ),
+
     # --- Symmetric, quantum-weakened (Grover) ------------------------------
     Signature(
         id="AES-128",

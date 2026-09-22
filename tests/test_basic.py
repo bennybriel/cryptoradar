@@ -85,3 +85,126 @@ def test_roadmap_refuses_via_cli_with_empty_review(tmp_path):
     review_mod.save_review(str(tmp_path / "review.json"), empty)
     loaded = review_mod.load_review(str(tmp_path / "review.json"))
     assert loaded["records"] == {}
+
+
+# ---------------------------------------------------------------------------
+# Regression tests: comment masking + compound-signature detection + bisect
+# line lookup (added after the BenPay/CryptoRadar false-positive review).
+# ---------------------------------------------------------------------------
+
+def test_comment_only_mention_is_not_flagged(tmp_path):
+    """A // comment describing legacy crypto with no real code nearby
+    should not produce a finding — this is the exact bug that made
+    demo_repo's pqc-pilot-service (a file with NO legacy crypto at all)
+    show a false RS256 finding sourced entirely from a comment."""
+    f = tmp_path / "Notes.java"
+    f.write_text(
+        "// This service replaces the old RSA and DES based signing path.\n"
+        "public class Notes {}\n"
+    )
+    result = scanner.scan_repo(str(tmp_path))
+    assert result["findings"] == []
+
+
+def test_hash_style_comment_is_not_flagged(tmp_path):
+    f = tmp_path / "notes.py"
+    f.write_text("# TODO: this used to call hashlib.md5(), now removed\n" "x = 1\n")
+    result = scanner.scan_repo(str(tmp_path))
+    assert result["findings"] == []
+
+
+def test_block_comment_is_not_flagged(tmp_path):
+    f = tmp_path / "Notes.java"
+    f.write_text("/* legacy RSA signing removed in v2, see JIRA-114 */\n" "public class Notes {}\n")
+    result = scanner.scan_repo(str(tmp_path))
+    assert result["findings"] == []
+
+
+def test_real_code_after_comment_still_detected_on_correct_line(tmp_path):
+    """Comment masking must not swallow real findings on later lines, and
+    line numbers must stay accurate once comments are stripped out."""
+    f = tmp_path / "Legacy.java"
+    f.write_text(
+        "// RSA-1024 message signing for interbank settlement.\n"
+        "public class Legacy {\n"
+        "    KeyPairGenerator kpg = KeyPairGenerator.getInstance(\"RSA\");\n"
+        "}\n"
+    )
+    result = scanner.scan_repo(str(tmp_path))
+    rsa_hits = [x for x in result["findings"] if x["signature_id"] == "RSA-KEYGEN"]
+    assert len(rsa_hits) == 1, "comment mention should not duplicate the real finding"
+    assert rsa_hits[0]["line"] == 3
+
+
+def test_string_literal_is_not_treated_as_comment(tmp_path):
+    """Comment masking must not eat string contents — a URL containing
+    '//' inside a string literal must not be misread as a line comment,
+    and a real finding later on the same or a following line must still
+    be detected."""
+    f = tmp_path / "Config.java"
+    f.write_text(
+        'String docs = "https://example.com/notes";\n'
+        'MessageDigest.getInstance("MD5");\n'
+    )
+    result = scanner.scan_repo(str(tmp_path))
+    md5_hits = [x for x in result["findings"] if x["signature_id"] == "MD5"]
+    assert len(md5_hits) == 1
+    assert md5_hits[0]["line"] == 2
+
+
+def test_compound_jca_signature_algorithm_detected(tmp_path):
+    """SHA256withRSA, SHA1withECDSA etc. are the single most common way
+    Java names a signature algorithm, and were previously invisible to
+    the scanner entirely: neither the standalone hash signature nor the
+    standalone RSA/ECDSA signature matches inside the concatenated
+    token, because word-boundary rules fail between 'with' and the
+    algorithm name."""
+    f = tmp_path / "Sig.java"
+    f.write_text(
+        'Signature.getInstance("SHA256withRSA");\n'
+        'Signature.getInstance("SHA1withECDSA");\n'
+        'Signature.getInstance("NONEwithECDSA");\n'
+    )
+    result = scanner.scan_repo(str(tmp_path))
+    ids = [f["signature_id"] for f in result["findings"]]
+    assert ids.count("JCA-COMPOUND-SIG-ALG") == 3
+
+
+def test_line_numbers_match_naive_linear_scan(tmp_path):
+    """Cross-check the bisect-based line lookup against an independent,
+    deliberately naive re-implementation, on a file with matches spread
+    across many lines — guards against an off-by-one regression in the
+    O(n) -> O(log n) change."""
+    lines = []
+    expected_lines = []
+    for i in range(1, 301):
+        if i % 37 == 0:
+            lines.append('MessageDigest.getInstance("MD5");')
+            expected_lines.append(i)
+        else:
+            lines.append(f"int v{i} = {i};")
+    f = tmp_path / "Many.java"
+    f.write_text("\n".join(lines) + "\n")
+
+    result = scanner.scan_repo(str(tmp_path))
+    found_lines = sorted(x["line"] for x in result["findings"] if x["signature_id"] == "MD5")
+    assert found_lines == expected_lines
+
+
+def test_scan_speed_reasonable_on_larger_file(tmp_path):
+    """Not a strict benchmark (CI hardware varies) — just a guard against
+    an accidental reintroduction of O(n) or worse per-match behavior."""
+    import time
+    lines = []
+    for i in range(5000):
+        if i % 100 == 0:
+            lines.append('Cipher.getInstance("DESede/CBC/PKCS5Padding");')
+        else:
+            lines.append(f"int v{i} = {i};")
+    f = tmp_path / "Big.java"
+    f.write_text("\n".join(lines) + "\n")
+
+    t0 = time.perf_counter()
+    scanner.scan_repo(str(tmp_path))
+    elapsed = time.perf_counter() - t0
+    assert elapsed < 2.0, f"scan took {elapsed:.2f}s, expected well under 2s for 5000 lines"
