@@ -28,7 +28,7 @@ inputs:
   ref:
     description: 'Git ref of bennybriel/cryptoradar to install (branch, tag, or commit SHA). Pin this in production.'
     required: false
-    default: 'v0.1.0'
+    default: 'v0.2.0'
 
 runs:
   using: 'composite'

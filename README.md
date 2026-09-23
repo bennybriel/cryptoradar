@@ -4,6 +4,10 @@
 legacy-core + modern-API fintech stacks — the reality of most African
 fintech and banking estates.**
 
+Current release: **v0.2.0** — see [CHANGELOG.md](CHANGELOG.md) for what
+changed (a compound Java signature-algorithm detection fix, comment-aware
+false-positive reduction, and a scanner performance fix).
+
 Most crypto-inventory tools (IBM's CBOM tooling, Microsoft's SymCrypt
 scanners, various OSS "crypto grep" scripts) are written for a single
 modern language and a single clean repo. That's not what a Nigerian,
@@ -132,7 +136,7 @@ Run these as two separate commands — pasting them as one line will make
 `pip` try to parse `scan`/`-o` as install flags and fail:
 
 ```bash
-pip install "git+https://github.com/bennybriel/cryptoradar.git@v0.1.0"
+pip install "git+https://github.com/bennybriel/cryptoradar.git@v0.2.0"
 ```
 ```bash
 cryptoradar scan /path/to/a/real/repo-on-your-machine -o report.html
@@ -177,7 +181,7 @@ pip installs the command into a `Scripts` folder that isn't always on your
   (existing windows won't pick up the change) and try `cryptoradar --help` again.
 
 Pin a tag/commit instead of `main` for anything beyond a quick try —
-`...cryptoradar.git@v0.1.0` as shown above — so a later change to this
+`...cryptoradar.git@v0.2.0` as shown above — so a later change to this
 repo's default branch doesn't silently change what gets installed.
 
 **As a GitHub Action, in their own CI pipeline** — this repo ships a
@@ -192,7 +196,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: bennybriel/cryptoradar@v0.1.0   # pin to a tag in production
+      - uses: bennybriel/cryptoradar@v0.2.0   # pin to a tag in production
         with:
           path: '.'
           fail-on: critical      # fails the PR check if a critical finding exists
