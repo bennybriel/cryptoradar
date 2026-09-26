@@ -258,6 +258,14 @@ from HS256 to RS256 and integrating a post-quantum crypto module
 almost nobody serving African financial infrastructure has an actual
 inventory of where RSA, 3DES, or MD5 are load-bearing in their stack —
 which is the prerequisite for any migration plan, PQC or otherwise.
+## See also
+
+This scanner diagnoses where a fintech stack relies on quantum-vulnerable
+cryptography. For a working example of what the *fix* looks like once
+built — quantum-safe identity credentials, ML-KEM channel security, and
+privacy-preserving payment analytics via homomorphic encryption, all
+running as a real FastAPI service — see
+[quantum-safe-fintech-infra](https://github.com/bennybriel/quantum-safe-fintech-infra).
 
 ## Business model
 
