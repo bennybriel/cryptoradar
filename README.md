@@ -267,7 +267,6 @@ privacy-preserving payment analytics via homomorphic encryption, all
 running as a real FastAPI service — see
 [quantum-safe-fintech-infra](https://github.com/bennybriel/quantum-safe-fintech-infra).
 
-see the [proof-of-concept summary](proof-of-concept-summary.pdf) for engagement options
 ## Business model
 
 This is designed as **open-core, not open-and-hope**:
